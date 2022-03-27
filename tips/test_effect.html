@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+  <script>
+    const bucket = new WeakMap()
+    let activeEffect = void 0
+    const testData = { a: 1, b: 2 }
+    const data = { test: 'hello', ok: true, cleanup: true }
+    const obj = new Proxy(data, {
+      get(target, key) {
+        tract(target, key)
+        return target[key]
+      },
+      set(target, key, value) {
+        target[key] = value
+        trigger(target, key)
+        return true
+      }
+    })
+    function cleanup(effectFn) {
+      for (let i = 0; i < effectFn.deps.length; i++) {
+        const deps = effectFn.deps[i]
+        deps.delete(effectFn)
+      }
+      effectFn.deps.length = 0
+    }
+    function effect(fn) {
+      const effectFn = () => {
+        cleanup(effectFn)
+        activeEffect = effectFn
+        fn()
+      }
+      effectFn.deps = []
+      effectFn()
+    }
+    function tract(target, key) {
+      if (!activeEffect) return
+      console.log(`收集依赖 ${key}`);
+      let depsMap = bucket.get(target)
+      if (!depsMap) bucket.set(target, (depsMap = new Map()))
+      let deps = depsMap.get(key)
+      if (!deps) depsMap.set(key, (deps = new Set()))
+      deps.add(activeEffect)
+      activeEffect.deps.push(deps)
+      console.log('activeEffect: ', activeEffect.deps);
+    }
+    function trigger(target, key) {
+      const depsMap = bucket.get(target)
+      if (!depsMap) return
+      console.log(`触发依赖 ${key}`);
+      const effects = depsMap.get(key)
+      const newEffects = new Set(effects)
+      newEffects.forEach(fn => fn())
+      // effects && effects.forEach(fn => fn())
+
+    }
+    effect(() => {
+      document.body.innerHTML = obj.ok ? obj.test : 'not'
+      console.log('object');
+    })
+    effect(() => {
+      testData.a = obj.cleanup ? obj.test : 'nonono'
+      console.log('testData');
+    })
+    obj.ok = false
+    obj.cleanup = false
+    obj.test = 'hello vue3'
+  </script>
+</body>
+
+</html>
