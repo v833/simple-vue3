@@ -76,7 +76,7 @@
     // setTimeout(() => {
     //   obj.ll = 'ok'
     // }, 1000)
-    const testData = { a: 1, b: 2 }
+    const testData = { a: 1, b: 2, foo: 0 }
 
     const bucket = new WeakMap()
     let activeEffect = void 0
@@ -88,22 +88,26 @@
       }
       effectFn.deps.length = 0
     }
-    const data = { test: 'hello', ok: true, cleanup: true }
-    function effect(fn) {
+    const data = { test: 'hello', ok: true, cleanup: true, foo: 0, bar: 1 }
+    function effect(fn, options = {}) {
       const effectFn = () => {
         cleanup(effectFn)
         activeEffect = effectFn
         effectStack.push(activeEffect)
-        fn()
+        const res = fn()
         effectStack.pop(effectStack)
         activeEffect = effectStack[effectStack.length - 1]
+        return res
       }
       effectFn.deps = []
-      effectFn()
+      effectFn.options = options
+      // effectFn()
+      if (effectFn.options.lazy) effectFn()
+      return effectFn
     }
     const obj = new Proxy(data, {
       get(target, key) {
-        tract(target, key)
+        track(target, key)
         return target[key]
       },
       set(target, key, value) {
@@ -112,7 +116,7 @@
         return true
       }
     })
-    function tract(target, key) {
+    function track(target, key) {
       if (!activeEffect) return
       console.log(`收集依赖 ${key}`);
       let depsMap = bucket.get(target)
@@ -128,22 +132,87 @@
       if (!depsMap) return
       const effects = depsMap.get(key)
       const effectsToRun = new Set(effects)
-      effectsToRun.forEach(effectFn => effectFn())
+      effectsToRun.forEach(effectFn => {
+        if (effectFn.options.scheduler) {
+          effectFn.options.scheduler(effectFn)
+        } else {
+          effectFn()
+        }
+      })
       // effects && effects.forEach(effectFn => effectFn())
     }
 
+    function computed(getter) {
+      let value
+      let dirty = true
+      const effectFn = effect(getter, {
+        lazy: true,
+        scheduler() {
+          if (!dirty) {
+            dirty = true
+            trigger(obj, 'value')
+          }
+        }
+      })
+      const obj = {
+        get value() {
+          if (dirty) {
+            value = effectFn()
+            dirty = false
+          }
+          track(obj, 'value')
+          return value
+        }
+      }
+      return obj
+    }
 
-    effect(() => {
-      document.body.innerHTML = obj.ok ? obj.test : 'not'
-      console.log('object');
-    })
-    effect(() => {
-      testData.a = obj.cleanup ? obj.test : 'nonono'
-      console.log('testData');
-    })
-    obj.ok = false
-    obj.cleanup = false
-    obj.test = 'hello vue3'
+
+
+    // effect(() => {
+    //   document.body.innerHTML = obj.ok ? obj.test : 'not'
+    //   console.log('object');
+    // })
+    // effect(() => {
+    //   testData.a = obj.cleanup ? obj.test : 'nonono'
+    //   console.log('testData');
+    // })
+    // obj.ok = false
+    // obj.cleanup = false
+    // obj.test = 'hello vue3'
+
+    // const jobQuene = new Set()
+    // const p = Promise.resolve()
+    // let isFlushing = false
+    // function flushJob() {
+    //   if (isFlushing) return
+    //   isFlushing = true
+    //   p.then(() => {
+    //     jobQuene.forEach(job => job())
+    //   }).finally(() => {
+    //     isFlushing = false
+    //   })
+    // }
+    // effect(() => {
+    //   console.log(obj.foo);
+    // }, {
+    //   scheduler(fn) {
+    //     jobQuene.add(fn)
+    //     flushJob()
+    //   }
+    // })
+
+    // obj.foo++
+    // obj.foo++
+    // obj.foo++
+
+    const sum = computed(() => obj.foo + obj.bar)
+    console.log(sum.value);
+    console.log(sum.value);
+    console.log(sum.value);
+    obj.foo++
+    console.log(sum.value);
+
   </script>
 </body>
 
