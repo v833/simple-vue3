@@ -166,7 +166,50 @@
       }
       return obj
     }
+    function traverse(value, seen = new Set()) {
+      if (typeof value !== 'object' || value === null || seen.has(value)) return
+      seen.add(value)
+      for (const k in value) {
+        traverse(value[k], seen)
+      }
+      return value
+    }
+    function watch(source, cb, options = {}) {
+      let getter
+      if (typeof source === 'function') {
+        getter = source
+      } else {
+        getter = traverse(source)
+      }
+      let newValue, oldValue
+      let cleanup
+      function onInvalidate(fn) {
+        cleanup = fn
+      }
+      const job = () => {
+        cleanup && cleanup()
+        newValue = effectFn()
+        cb(newValue, oldValue, onInvalidate)
+        oldValue = newValue
+      }
+      const effectFn = effect(getter, {
+        lazy: true,
+        scheduler() {
+          if (options.flush === 'post') {
+            const p = Promise.resolve()
+            p.then(job)
+          } else {
+            job()
+          }
+        }
+      })
+      if (options.immediate) {
+        job()
+      } else {
+        oldValue = effectFn()
+      }
 
+    }
 
 
     // effect(() => {
@@ -206,13 +249,20 @@
     // obj.foo++
     // obj.foo++
 
-    const sum = computed(() => obj.foo + obj.bar)
-    console.log(sum.value);
-    console.log(sum.value);
-    console.log(sum.value);
-    obj.foo++
-    console.log(sum.value);
+    // const sum = computed(() => obj.foo + obj.bar)
 
+    // obj.foo++
+    // console.log(sum.value);
+
+    watch(() => obj.foo, (newVal, oldVal) => {
+      console.log('newVal: ', newVal);
+      console.log('oldVal: ', oldVal);
+    }, {
+      // immediate: true,
+      // flush: 'post'
+    })
+
+    obj.foo++
   </script>
 </body>
 
