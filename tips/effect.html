@@ -9,78 +9,42 @@
 
 <body>
   <script>
-    // const bucket = new Set()
-    // // 用一个全局变量存储被注册的effect函数
-    // let activeEffect
-    // const data = {
-    //   test: 'hello'
-    // }
-    // const obj = new Proxy(data, {
-    //   get(target, key) {
-    //     bucket.add(activeEffect)
-    //     return target[key]
-    //   },
-    //   set(target, key, value) {
-    //     target[key] = value
-    //     bucket.forEach(fn => fn())
-    //     return true
-    //   }
-    // })
-    // // 注册effect函数
-    // function effect(fn) {
-    //   activeEffect = fn
-    //   fn()
-    // }
-
-    // effect(() => {
-    //   document.body.innerHTML = obj.ll
-    //   console.log('object');
-    // })
-    // setTimeout(() => {
-    //   obj.test = 'ok'
-    // }, 1000)
-
-
-    // 上面一版中，effect函数与被操作的字段没有建立联系，如果读取一个无关的字段，effect也会执行
-    // const bucket = new WeakMap()
-    // let activeEffect = null
-    // function effect(fn) {
-    //   activeEffect = fn
-    //   fn()
-    // }
-    // const data = { test: 'hello' }
-    // const obj = new Proxy(data, {
-    //   get(target, key) {
-    //     if (!activeEffect) return
-    //     let depsMap = bucket.get(target)
-    //     if (!depsMap) bucket.set(target, (depsMap = new Map()))
-    //     let deps = depsMap.get(key)
-    //     if (!deps) depsMap.set(key, (deps = new Set()))
-    //     deps.add(activeEffect)
-    //     return target[key]
-    //   },
-    //   set(target, key, value) {
-    //     target[key] = value
-    //     const depsMap = bucket.get(target)
-    //     if (!depsMap) return
-    //     const effects = depsMap.get(key)
-    //     effects && effects.forEach(fn => fn())
-    //     return true
-    //   }
-    // })
-
-    // effect(() => {
-    //   document.body.innerHTML = obj.test
-    //   console.log('object');
-    // })
-    // setTimeout(() => {
-    //   obj.ll = 'ok'
-    // }, 1000)
     const testData = { a: 1, b: 2, foo: 0 }
-
     const bucket = new WeakMap()
     let activeEffect = void 0
     const effectStack = []
+    const TriggerType = {
+      ADD: 'ADD',
+      SET: 'SET',
+      DELETE: 'DELETE'
+    }
+    const ITERATE_KEY = Symbol()
+    // 存储原始对象到代理对象的映射
+    const reactiveMap = new Map()
+    // 重写includes方法
+    // const originMethod = Array.prototype.includes
+    const arrayInstrumentations = {}
+      ;['includes', 'indexOf', 'lastIndexOf'].forEach(method => {
+        const originMethod = Array.prototype[method]
+        arrayInstrumentations[method] = function (...args) {
+          let res = originMethod.apply(this, args)
+          if (!res) {
+            res = originMethod.apply(this.raw, args)
+          }
+          return res
+        }
+      })
+    let shouldTrack = true
+      ;['push', 'pop', 'shift', 'unshift', 'splice'].forEach(method => {
+        const originMethod = Array.prototype[method]
+        arrayInstrumentations[method] = function (...args) {
+          shouldTrack = false
+          const res = originMethod.apply(this, args)
+          shouldTrack = true
+          return res
+        }
+      })
+    // =============================================================
     function cleanup(effectFn) {
       for (let i = 0; i < effectFn.deps.length; i++) {
         const deps = effectFn.deps[i]
@@ -88,7 +52,6 @@
       }
       effectFn.deps.length = 0
     }
-    const data = { test: 'hello', ok: true, cleanup: true, foo: 0, bar: 1 }
     function effect(fn, options = {}) {
       const effectFn = () => {
         cleanup(effectFn)
@@ -102,23 +65,12 @@
       effectFn.deps = []
       effectFn.options = options
       // effectFn()
-      if (effectFn.options.lazy) effectFn()
+      if (!effectFn.options.lazy) effectFn()
       return effectFn
     }
-    const obj = new Proxy(data, {
-      get(target, key) {
-        track(target, key)
-        return target[key]
-      },
-      set(target, key, value) {
-        target[key] = value
-        trigger(target, key)
-        return true
-      }
-    })
     function track(target, key) {
-      if (!activeEffect) return
-      console.log(`收集依赖 ${key}`);
+      if (!activeEffect || !shouldTrack) return
+      console.log(`收集依赖 ${key.toString()}`);
       let depsMap = bucket.get(target)
       if (!depsMap) bucket.set(target, (depsMap = new Map()))
       let deps = depsMap.get(key)
@@ -126,12 +78,47 @@
       deps.add(activeEffect)
       activeEffect.deps.push(deps)
     }
-    function trigger(target, key) {
-      console.log(`触发依赖 ${key}`);
+    function trigger(target, key, type, newValue) {
+      // console.log('newValue: ', newValue);
       const depsMap = bucket.get(target)
       if (!depsMap) return
+      console.log(`触发依赖 ${key.toString()}`);
+      console.log('type: ', type);
+      const effectsToRun = new Set()
       const effects = depsMap.get(key)
-      const effectsToRun = new Set(effects)
+
+
+      effects && effects.forEach(effectFn => {
+        if (activeEffect !== effectFn) {
+          effectsToRun.add(effectFn)
+        }
+      })
+      if (type === TriggerType.ADD || type === TriggerType.DELETE) {
+        const iterateEffects = depsMap.get(ITERATE_KEY)
+        iterateEffects && iterateEffects.forEach(effectFn => {
+          if (activeEffect !== effectFn) {
+            effectsToRun.add(effectFn)
+          }
+        })
+      }
+
+      if (type === TriggerType.ADD && Array.isArray(target)) {
+        const lengthEffects = depsMap.get('length')
+        lengthEffects && lengthEffects.forEach(effectFn => {
+          if (activeEffect !== effectFn) {
+            effectsToRun.add(effectFn)
+          }
+        })
+      }
+      if (Array.isArray(target) && key === 'length') {
+        depsMap.forEach((effects, key) => {
+          if (key >= newValue) {
+            effects.forEach(effectFn => {
+              effectsToRun.add(effectFn)
+            })
+          }
+        })
+      }
       effectsToRun.forEach(effectFn => {
         if (effectFn.options.scheduler) {
           effectFn.options.scheduler(effectFn)
@@ -141,7 +128,6 @@
       })
       // effects && effects.forEach(effectFn => effectFn())
     }
-
     function computed(getter) {
       let value
       let dirty = true
@@ -210,12 +196,106 @@
       }
 
     }
+    function createReactive(obj, isShallow = false, isReadonly = false) {
+      return new Proxy(obj, {
+        get(target, key, receiver) {
+          if (key === 'raw') return target
+          // 如果操作的目标对象是数组，并且key存在与arrayInstrumentations上，
+          // 那么返回定义在arrayInstrumentatios上的值
+          if (Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)) {
+            return Reflect.get(arrayInstrumentations, key, receiver)
+          }
+          const res = Reflect.get(target, key, receiver)
+          if (!isReadonly && typeof key !== 'symbol') {
+            track(target, key)
+          }
+          if (isShallow) return res
+          if (typeof res === 'object' && res !== null) {
+            return isReadonly ? readonly(res) : reactive(res)
+          }
+          return res
+        },
+        set(target, key, newValue, receiver) {
+          if (isReadonly) {
+            console.warn(`属性${key}是只读的`)
+            return true
+          }
+          const oldValue = target[key]
+          const type = Array.isArray(target) ?
+            Number(key) < target.length ? 'SET' : 'ADD'
+            : Object.prototype.hasOwnProperty.call(target, key) ? TriggerType.SET : TriggerType.ADD
+          const res = Reflect.set(target, key, newValue, receiver)
+          if (!Object.is(oldValue, newValue)) {
+            if (target === receiver.raw) {
+              trigger(target, key, type, newValue)
+            }
+          }
+          return res
+        },
+        has(target, key) {
+          const res = Reflect.has(target, key)
+          track(target, key)
+          return res
+        },
+        ownKeys(target) {
+          const res = Reflect.ownKeys(target)
+          track(target, Array.isArray(target) ? 'length' : ITERATE_KEY)
+          return res
+        },
+        deleteProperty(target, key) {
+          if (isReadonly) {
+            console.log(`属性${key}是只读的`);
+            return true
+          }
+          const hadKey = Object.prototype.hasOwnProperty(target, key)
+          const res = Reflect.deleteProperty(target, key)
+          if (hasKey && res) {
+            trigger(target, key, TriggerType.DELETE)
+          }
 
+          return res
+        }
+      })
+    }
+    function reactive(obj) {
+      const existionProxy = reactiveMap.get(obj)
+      if (existionProxy) return existionProxy
 
+      const proxy = createReactive(obj)
+      reactiveMap.set(obj, proxy)
+      return proxy
+    }
+    function shallowReactive(obj) {
+      return createReactive(obj, true)
+    }
+    function readonly(obj) {
+      return createReactive(obj, false, true)
+    }
+    function shallowReadonly(obj) {
+      return createReactive(obj, true, true)
+    }
+    // ======================================================================
     // effect(() => {
     //   document.body.innerHTML = obj.ok ? obj.test : 'not'
     //   console.log('object');
     // })
+    const data = { test: 'hello', ok: true, cleanup: true, foo: 0, bar: { a: 1 }, a: 3 }
+    const temp = []
+
+    const arr = reactive(temp)
+    // console.log(arr.includes(data));
+    effect(() => {
+      arr.push(2)
+    })
+    effect(() => {
+      arr.push(2)
+    })
+
+
+
+    // obj.bar.a++
+    // obj.a = 5
+    // obj.f = 5
     // effect(() => {
     //   testData.a = obj.cleanup ? obj.test : 'nonono'
     //   console.log('testData');
@@ -254,15 +334,15 @@
     // obj.foo++
     // console.log(sum.value);
 
-    watch(() => obj.foo, (newVal, oldVal) => {
-      console.log('newVal: ', newVal);
-      console.log('oldVal: ', oldVal);
-    }, {
-      // immediate: true,
-      // flush: 'post'
-    })
+    // watch(() => obj.foo, (newVal, oldVal) => {
+    //   console.log('newVal: ', newVal);
+    //   console.log('oldVal: ', oldVal);
+    // }, {
+    //   immediate: true,
+    //   flush: 'post'
+    // })
 
-    obj.foo++
+    // obj.foo++
   </script>
 </body>
 
