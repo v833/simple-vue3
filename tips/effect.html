@@ -20,6 +20,7 @@
     }
     const ITERATE_KEY = Symbol()
     // 存储原始对象到代理对象的映射
+    const MAP_KEY_ITERATE_KEY = Symbol()
     const reactiveMap = new Map()
     // 重写includes方法
     // const originMethod = Array.prototype.includes
@@ -34,6 +35,115 @@
           return res
         }
       })
+    const mutableInstrumentations = {
+      add(key) {
+        const target = this.raw
+        const hadKey = target.has(key)
+        if (!hadKey) {
+          const res = target.add(key)
+          trigger(target, key, TriggerType.ADD)
+        }
+
+        return res
+      },
+      delete(key) {
+        const target = this.raw
+        const hadKey = target.has(key)
+        const res = target.delete(key)
+        if (hadKey && res) {
+          trigger(target, key, TriggerType.DELETE)
+        }
+        return res
+      },
+      get(key) {
+        const target = this.raw
+        const had = target.has(key)
+        track(target, key)
+        if (had) {
+          const res = target.get(key)
+          return typeof key === 'object' ? reactive(res) : res
+        }
+      },
+      set(key, value) {
+        const target = this.raw
+        const had = target.has(key)
+        const oldValue = target.get(key)
+        const rawValue = value.raw || value
+        const res = target.set(key, rawValue)
+        if (!had) {
+          trigger(target, key, TriggerType.ADD)
+        } else if (oldValue !== value) {
+          trigger(target, key, TriggerType.SET)
+        }
+        return res
+      },
+      forEach(callback, thisArg) {
+        const target = this.raw
+        const wrap = (val) => typeof val === 'object' ? reactive(val) : val
+        track(target, ITERATE_KEY)
+        target.forEach((v, k) => {
+          callback.call(thisArg, wrap(v), wrap(k), this)
+        })
+      },
+      [Symbol.iterator]: iterationMethod,
+      entries: iterationMethod,
+      values: valuesIterationMethod,
+      keys: keysIterationMethod
+    }
+    function iterationMethod() {
+      const target = this.raw
+      const itr = target[Symbol.iterator]()
+      const wrap = (val) => typeof val === 'object' ? reactive(val) : val
+      track(target, ITERATE_KEY)
+      return {
+        next() {
+          const { value, done } = itr.next()
+          return {
+            value: value ? [wrap(value[0], wrap(value[1]))] : value,
+            done
+          }
+        },
+        [Symbol.iterator]() {
+          return this
+        }
+      }
+    }
+    function valuesIterationMethod() {
+      const target = this.raw
+      const itr = target.values()
+      const wrap = (val) => typeof val === 'object' ? reactive(val) : val
+      track(target, ITERATE_KEY)
+      return {
+        next() {
+          const { value, done } = itr.next()
+          return {
+            value: wrap(value),
+            done
+          }
+        },
+        [Symbol.iterator]() {
+          return this
+        }
+      }
+    }
+    function keysIterationMethod() {
+      const target = this.raw
+      const itr = target.keys()
+      const wrap = (val) => typeof val === 'object' ? reactive(val) : val
+      track(target, MAP_KEY_ITERATE_KEY)
+      return {
+        next() {
+          const { value, done } = itr.next()
+          return {
+            value: wrap(value),
+            done
+          }
+        },
+        [Symbol.iterator]() {
+          return this
+        }
+      }
+    }
     let shouldTrack = true
       ;['push', 'pop', 'shift', 'unshift', 'splice'].forEach(method => {
         const originMethod = Array.prototype[method]
@@ -93,8 +203,20 @@
           effectsToRun.add(effectFn)
         }
       })
-      if (type === TriggerType.ADD || type === TriggerType.DELETE) {
+      if (type === TriggerType.ADD ||
+        type === TriggerType.DELETE ||
+        (type === TriggerType.SET && Object.prototype.toString.call(target) === '[object Map]')) {
         const iterateEffects = depsMap.get(ITERATE_KEY)
+        iterateEffects && iterateEffects.forEach(effectFn => {
+          if (activeEffect !== effectFn) {
+            effectsToRun.add(effectFn)
+          }
+        })
+      }
+      if (type === TriggerType.ADD ||
+        type === TriggerType.DELETE &&
+        Object.prototype.toString.call(target) === '[object Map]') {
+        const iterateEffects = depsMap.get(MAP_KEY_ITERATE_KEY)
         iterateEffects && iterateEffects.forEach(effectFn => {
           if (activeEffect !== effectFn) {
             effectsToRun.add(effectFn)
@@ -200,12 +322,20 @@
       return new Proxy(obj, {
         get(target, key, receiver) {
           if (key === 'raw') return target
+          if (key === 'size') {
+            track(target, ITERATE_KEY)
+            return Reflect.get(target, key, target)
+          }
+          if (['[object Map]', '[object Set]'].includes(Object.prototype.toString.call(target))) {
+            return mutableInstrumentations[key]
+          }
           // 如果操作的目标对象是数组，并且key存在与arrayInstrumentations上，
           // 那么返回定义在arrayInstrumentatios上的值
           if (Array.isArray(target) && arrayInstrumentations.hasOwnProperty(key)) {
             return Reflect.get(arrayInstrumentations, key, receiver)
           }
           const res = Reflect.get(target, key, receiver)
+          // const res = target[key].bind(target)
           if (!isReadonly && typeof key !== 'symbol') {
             track(target, key)
           }
@@ -274,22 +404,84 @@
     function shallowReadonly(obj) {
       return createReactive(obj, true, true)
     }
+    function ref(val) {
+      const wrapper = {
+        value: val
+      }
+      Object.defineProperty(wrapper, '__v_isRef', {
+        value: true
+      })
+      return reactive(wrapper)
+    }
+    // 解决响应式丢失问题
+    function toRef(obj, key) {
+      const wrapper = {
+        get value() {
+          return obj[key]
+        },
+        set value(val) {
+          obj[key] = val
+        }
+      }
+      return wrapper
+    }
+    function toRefs(obj) {
+      const ret = {}
+      for (let key in obj) {
+        ret[key] = toRef(obj, key)
+      }
+      return ret
+    }
+    // 自动脱ref return的对象交给proxyRefs处理，这就是我们可以在模板中不用通过value访问ref
+    function proxyRefs(target) {
+      return new Proxy(target, {
+        get(target, key, receiver) {
+          const value = Reflect.get(target, key, receiver)
+          return value.__v_isRef ? value.value : value
+        },
+        set(target, key, newValue, receiver) {
+          const value = target[key]
+          if (value.__v_isRef) {
+            value.value = newValue
+            return true
+          }
+          return Reflect.set(target, key, newValue, receiver)
+        }
+      })
+    }
     // ======================================================================
+    // const a = ref(1)
+    // effect(() => {
+    //   console.log(a.value);
+    // })
+    // a.value = 2
     // effect(() => {
     //   document.body.innerHTML = obj.ok ? obj.test : 'not'
     //   console.log('object');
     // })
-    const data = { test: 'hello', ok: true, cleanup: true, foo: 0, bar: { a: 1 }, a: 3 }
-    const temp = []
+    // const data = { test: 'hello', ok: true, cleanup: true, foo: 0, bar: { a: 1 }, a: 3 }
+    // const temp = [1, 2, 3]
 
-    const arr = reactive(temp)
+    // const arr = reactive(temp)
+
+    // // // const mapOne = 
+    // // const proxy = reactive(new Map([['key', 1]]))
+    // effect(() => {
+    //   console.log(arr[1]);
+    // })
+
+    // console.log(proxy);c
+    // effect(() => {
+    //   console.log(proxy.get('key'));
+    // })
+    // proxy.set('key', 2)
     // console.log(arr.includes(data));
-    effect(() => {
-      arr.push(2)
-    })
-    effect(() => {
-      arr.push(2)
-    })
+    // effect(() => {
+    //   arr.push(2)
+    // })
+    // effect(() => {
+    //   arr.push(2)
+    // })
 
 
 
