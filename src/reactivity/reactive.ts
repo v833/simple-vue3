@@ -10,7 +10,7 @@ export function reactive(raw) {
     set(target, key, value) {
       const res = Reflect.set(target, key, value)
       trigger(target, key)
-      return res
+      return true
     }
   })
 }

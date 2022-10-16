@@ -1,6 +1,5 @@
 class ReactiveEffect {
   private _fn: any
-  deps = []
   // public 将参数传递出去
   constructor(fn, public scheduler?) {
     this._fn = fn
@@ -9,13 +8,7 @@ class ReactiveEffect {
     activeEffect = this
     return this._fn()
   }
-  stop() {
-    this.deps.forEach((dep: any) => {
-      dep.delete(this)
-    })
-  }
 }
-
 const targetMap = new WeakMap()
 
 export function track(target, key) {
@@ -24,16 +17,12 @@ export function track(target, key) {
     depsMap = new Map()
     targetMap.set(target, depsMap)
   }
-  let dep = depsMap.get(key)
-  if (!dep) {
-    dep = new Set()
-    depsMap.set(key, dep)
+  let deps = depsMap.get(key)
+  if (!deps) {
+    deps = new Set()
+    depsMap.set(key, deps)
   }
-  if (activeEffect) {
-    dep.add(activeEffect)
-    // 反向收集
-    activeEffect.deps.push(dep)
-  }
+  deps.add(activeEffect)
 }
 
 export function trigger(target, key) {
@@ -52,17 +41,9 @@ export function trigger(target, key) {
 
 let activeEffect
 export function effect(fn, options: any = {}) {
-  const { scheduler } = options
+  const scheduler = options.scheduler
 
   const _effect = new ReactiveEffect(fn, scheduler)
-  _effect.run()
-
-  const runner: any = _effect.run.bind(_effect)
-  runner.effect = _effect
-
-  return runner
-}
-
-export function stop(runner) {
-  runner.effect.stop()
+  // _effect.run()
+  return _effect.run.bind(_effect)
 }
