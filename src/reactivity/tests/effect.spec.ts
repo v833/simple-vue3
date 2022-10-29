@@ -1,6 +1,5 @@
 import { reactive } from '../reactive'
 import { effect, stop } from '../effect'
-// import { effect, stop } from '../demo'
 
 describe('effect', () => {
   it('happy path', () => {
