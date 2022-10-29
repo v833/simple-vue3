@@ -4,7 +4,7 @@ let activeEffect
 // 解决 stop prop++ 触发了get和set 使stop失效
 let shouldTrack
 
-class ReactiveEffect {
+export class ReactiveEffect {
   private _fn: any
   deps = []
   active = true
