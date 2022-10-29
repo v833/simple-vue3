@@ -1,4 +1,5 @@
 import { track, trigger } from './effect'
+// import { track, trigger } from './demo'
 
 export function reactive(raw) {
   return new Proxy(raw, {

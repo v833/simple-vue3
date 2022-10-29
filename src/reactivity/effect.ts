@@ -1,6 +1,10 @@
+import { extend } from '../shared'
+
 class ReactiveEffect {
   private _fn: any
   deps = []
+  active = true
+  onStop?: () => void
   // public 将参数传递出去
   constructor(fn, public scheduler?) {
     this._fn = fn
@@ -10,10 +14,18 @@ class ReactiveEffect {
     return this._fn()
   }
   stop() {
-    this.deps.forEach((dep: any) => {
-      dep.delete(this)
-    })
+    if (this.active) {
+      this.onStop?.()
+      cleanupEffect(this)
+      this.active = false
+    }
   }
+}
+
+function cleanupEffect(effect) {
+  effect.deps.forEach((dep: any) => {
+    dep.delete(effect)
+  })
 }
 
 const targetMap = new WeakMap()
@@ -52,9 +64,11 @@ export function trigger(target, key) {
 
 let activeEffect
 export function effect(fn, options: any = {}) {
-  const { scheduler } = options
+  const _effect = new ReactiveEffect(fn, options.scheduler)
 
-  const _effect = new ReactiveEffect(fn, scheduler)
+  // extend
+  extend(_effect, options)
+
   _effect.run()
 
   const runner: any = _effect.run.bind(_effect)
