@@ -6,6 +6,8 @@ class RefImp {
   private _value: any
   public dep
   private _rawValue: any
+  public __v_isRef = true
+
   constructor(value) {
     this._rawValue = value
     this._value = convert(value)
@@ -27,6 +29,15 @@ class RefImp {
 }
 export function ref(value) {
   return new RefImp(value)
+}
+
+export function isRef(ref) {
+  return !!ref.__v_isRef
+}
+
+// unref()：是 val = isRef(val) ? val.value : val 的语法糖。
+export function unRef(ref) {
+  return isRef(ref) ? ref.value : ref
 }
 
 function trackRefValue(ref) {
