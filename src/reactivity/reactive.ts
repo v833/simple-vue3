@@ -1,6 +1,6 @@
 // import { track, trigger } from './demo'
 
-import { mutableHandlers, readonlyHandlers } from './baseHandlers'
+import { mutableHandlers, readonlyHandlers, shllowReadonlyHandlers } from './baseHandlers'
 
 export const enum ReactiveFlags {
   IS_REACTIVE = 'is_reactive',
@@ -17,6 +17,13 @@ export function reactive(raw) {
 
 export function readonly(raw) {
   return createActiveObject(raw, readonlyHandlers)
+}
+
+// export function shallowReactive(raw) {
+//   return createActiveObject(raw, shallowReactiveHanlers)
+// }
+export function shallowReadonly(raw) {
+  return createActiveObject(raw, shllowReadonlyHandlers)
 }
 
 export function isReactive(value) {
