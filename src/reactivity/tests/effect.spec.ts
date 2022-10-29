@@ -71,6 +71,9 @@ describe('effect', () => {
     // stopped effect should still be manually callable
     runner()
     expect(dummy).toBe(3)
+    obj.prop++
+    // obj.prop = obj.prop + 1 set get
+    expect(dummy).toBe(3)
   })
 
   it('onStop', () => {
