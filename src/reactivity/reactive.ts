@@ -22,6 +22,7 @@ export function readonly(raw) {
 // export function shallowReactive(raw) {
 //   return createActiveObject(raw, shallowReactiveHanlers)
 // }
+
 export function shallowReadonly(raw) {
   return createActiveObject(raw, shllowReadonlyHandlers)
 }

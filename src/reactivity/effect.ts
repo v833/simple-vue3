@@ -56,13 +56,18 @@ export function track(target, key) {
     dep = new Set()
     depsMap.set(key, dep)
   }
+  trackEffects(dep)
+}
+
+export function isTraking() {
+  return shouldTrack && activeEffect
+}
+
+export function trackEffects(dep) {
+  if (dep.has(activeEffect)) return
   dep.add(activeEffect)
   // 反向收集
   activeEffect.deps.push(dep)
-}
-
-function isTraking() {
-  return shouldTrack && activeEffect
 }
 
 export function trigger(target, key) {
@@ -70,6 +75,11 @@ export function trigger(target, key) {
   if (!depsMap) return
   const deps = depsMap.get(key)
   if (!deps) return
+
+  triggerEffects(deps)
+}
+
+export function triggerEffects(deps) {
   deps.forEach((effect) => {
     if (effect.scheduler) {
       effect.scheduler()
