@@ -1,3 +1,4 @@
+import { isObject } from '../shared/index'
 import { createComponentInstance, setupComponent } from './component'
 
 export function render(vnode, container) {
@@ -10,15 +11,19 @@ function patch(vnode, container) {
 
   // 判断是不是element类型
   if (typeof vnode.type === 'string') {
-    // processElement()
-  
-  } else {
+    processElement(vnode, container)
+  } else if (isObject(vnode.type)) {
     processComponent(vnode, container)
   }
 }
 
 function processComponent(vnode, container) {
   mountComponent(vnode, container)
+}
+
+function processElement(vnode, container) {
+  // init -> update
+  mountElement(vnode, container)
 }
 
 function mountComponent(vnode, container) {
@@ -32,4 +37,25 @@ function setupRenderEffect(instance, container) {
 
   // vnode -> patch
   // vnode -> element -> mountElement
+}
+function mountElement(vnode: any, container: any) {
+  const el = document.createElement(vnode.type)
+  const { props, children } = vnode
+  // string array
+  if (typeof children === 'string') {
+    el.textContent = children
+  } else if (Array.isArray(children)) {
+    mountChildren(children, el)
+  }
+  for (const key in props) {
+    const val = props[key]
+    el.setAttribute(key, val)
+  }
+  container.append(el)
+}
+
+function mountChildren(children, container) {
+  children.forEach((vnode) => {
+    patch(vnode, container)
+  })
 }
