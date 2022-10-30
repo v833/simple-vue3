@@ -9,7 +9,12 @@ function patch(vnode, container) {
   // 处理组件
 
   // 判断是不是element类型
-  processComponent(vnode, container)
+  if (typeof vnode.type === 'string') {
+    // processElement()
+  
+  } else {
+    processComponent(vnode, container)
+  }
 }
 
 function processComponent(vnode, container) {

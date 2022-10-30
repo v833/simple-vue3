@@ -3,7 +3,6 @@ export function createComponentInstance(vnode) {
     vnode,
     type: vnode.type
   }
-
   return component
 }
 
@@ -36,8 +35,7 @@ function handleSetupResult(instance, setupResult) {
 }
 function finishComponentSetup(instance: any) {
   const Component = instance.type
-
-  if (!instance.render) {
-    instance.render = Component.render
-  }
+  // if (Component.render) {
+  instance.render = Component.render
+  // }
 }
