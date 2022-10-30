@@ -9,14 +9,22 @@ export const App = {
       'div',
       {
         id: 'root',
-        class: ['red', 'hard'],
-        onClick() {
-          console.log('click')
-        }
+        class: ['red', 'hard']
+        // onClick() {
+        //   console.log('click')
+        // }
       },
       // setupState
       // this.$el
-      [h('div', {}, 'hi ' + this.msg), h(Foo, { count: 1 })]
+      [
+        h('div', {}, 'hi ' + this.msg),
+        h(Foo, {
+          count: 1,
+          onAddFoo(a, b) {
+            console.log('on-add-foo', a, b)
+          }
+        })
+      ]
       // [h('p', { class: 'red' }, 'hi'), h('p', { class: 'blue' }, 'vue')]
     )
   },
