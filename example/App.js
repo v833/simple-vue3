@@ -5,6 +5,10 @@ export const App = {
   name: 'App',
   render() {
     window.self = this
+    const slot = {
+      header: ({ age }) => h('p', {}, 'slot.p1' + age),
+      footer: () => h('p', {}, 'slot.p2')
+    }
     return h(
       'div',
       {
@@ -18,12 +22,16 @@ export const App = {
       // this.$el
       [
         h('div', {}, 'hi ' + this.msg),
-        h(Foo, {
-          count: 1,
-          onAddFoo(a, b) {
-            console.log('on-add-foo', a, b)
-          }
-        })
+        h(
+          Foo,
+          {
+            count: 1,
+            onAddFoo(a, b) {
+              console.log('on-add-foo', a, b)
+            }
+          },
+          slot
+        )
       ]
       // [h('p', { class: 'red' }, 'hi'), h('p', { class: 'blue' }, 'vue')]
     )

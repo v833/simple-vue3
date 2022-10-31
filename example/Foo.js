@@ -1,4 +1,4 @@
-import { h } from '../lib/guide-mini-vue-esm.js'
+import { h, renderSlots } from '../lib/guide-mini-vue-esm.js'
 
 export const Foo = {
   name: 'Foo',
@@ -7,7 +7,6 @@ export const Foo = {
     const emitAdd = () => {
       emit('add-foo', 1, 2)
     }
-
     return {
       emitAdd
     }
@@ -21,6 +20,15 @@ export const Foo = {
       'emitAdd'
     )
     const foo = h('p', {}, 'foo')
-    return h('div', {}, [foo, btn])
+    const age = 18
+    // renderSlots
+    // 1. 获取到渲染得元素
+    // 2. 获取导渲染得位置
+    return h('div', {}, [
+      renderSlots(this.$slots, 'header', { age }),
+      foo,
+      btn,
+      renderSlots(this.$slots, 'footer')
+    ])
   }
 }
