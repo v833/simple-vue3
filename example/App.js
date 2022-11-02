@@ -38,7 +38,6 @@ export const App = {
   },
   setup() {
     const instance = getCurrentInstance()
-    console.log('instance: ', instance)
     return {
       msg: 'mini-vue'
     }

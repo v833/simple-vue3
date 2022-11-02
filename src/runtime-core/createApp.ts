@@ -8,7 +8,7 @@ export function createApp(rootComponent) {
       // componnet -> vnode
       // 后续所有操作基于vnode做处理
       const vnode = createVNode(rootComponent)
-      render(vnode, rootContainer)
+      render(vnode, rootContainer, null)
     }
   }
 }
