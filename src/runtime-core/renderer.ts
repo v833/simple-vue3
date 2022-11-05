@@ -63,9 +63,9 @@ export function createRenderer(options) {
       } else {
         console.log('update')
         const subTree = instance.render.call(proxy)
-        const preSubTree = instance.subTree
+        const prevSubTree = instance.subTree
         instance.subTree = subTree
-        patch(preSubTree, subTree, container, instance)
+        patch(prevSubTree, subTree, container, instance)
       }
     })
   }
@@ -80,12 +80,39 @@ export function createRenderer(options) {
     }
     for (const key in props) {
       const val = props[key]
-      hostPatchProp(el, key, val)
+      hostPatchProp(el, key, null, val)
     }
     // container.append(el)
     hostInsert(el, container)
   }
-  function patchElement(n1: any, n2: any, container: any) {}
+  function patchElement(n1: any, n2: any, container: any) {
+    const oldProps = n1.props || EMPTY_OBJ
+    const newProps = n2.props || EMPTY_OBJ
+    const el = (n2.el = n1.el)
+    patchProps(el, oldProps, newProps)
+  }
+
+  const EMPTY_OBJ = {}
+
+  function patchProps(el, oldProps, newProps) {
+    if (oldProps === newProps) return
+
+    for (const key in newProps) {
+      const prevProp = oldProps[key]
+      const nextProp = newProps[key]
+      if (prevProp !== nextProp) {
+        hostPatchProp(el, key, prevProp, nextProp)
+      }
+    }
+
+    if (oldProps !== EMPTY_OBJ) {
+      for (const key in oldProps) {
+        if (!(key in newProps)) {
+          hostPatchProp(el, key, oldProps[key], null)
+        }
+      }
+    }
+  }
 
   function mountChildren(vnode, container, parentComponent) {
     vnode.children.forEach((v) => {
