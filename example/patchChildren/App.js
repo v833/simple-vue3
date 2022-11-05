@@ -12,8 +12,8 @@ export const App = {
       h('p', {}, '主页'),
       // 老的是array, 新的是text
       // h(ArrayToText),
-      // h(ArrayToArray)
-      h(TextToArray)
+      h(ArrayToArray)
+      // h(TextToArray)
       // h(TextToText)
     ])
   }
