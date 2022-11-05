@@ -1,5 +1,5 @@
-import { createTextVNode, getCurrentInstance, h } from '../lib/guide-mini-vue-esm.js'
-import { Foo } from './foo.js'
+import { createTextVNode, getCurrentInstance, h } from '../../lib/guide-mini-vue-esm.js'
+import { Foo } from './Foo.js'
 window.self = null
 export const App = {
   name: 'App',
