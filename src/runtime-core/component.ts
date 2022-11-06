@@ -18,7 +18,9 @@ export function createComponentInstance(vnode, parent) {
     provides: parent ? parent.provides : {},
     parent,
     isMounted: false,
-    subTree: {}
+    subTree: {},
+    // 下次要更新的vnode
+    next: null
   }
   return component
 }

@@ -2,6 +2,7 @@ import { hasOwn } from '../shared/index'
 
 const publicPropertiesMap = {
   $el: (i) => i.vnode.el,
+  $props: (i) => i.props,
   $slots: (i) => i.slots
 }
 

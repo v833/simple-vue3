@@ -33,8 +33,8 @@ function createVNode(keyList) {
 // const prevChildren = createVNode(['A', 'B', 'C', 'D', 'E', 'F', 'G'])
 // const nextChildren = createVNode(['A', 'B', 'E', 'C', 'D', 'F', 'G'])
 
-const prevChildren = createVNode(['A', 'B', 'C', 'D', 'E', 'Z', 'F', 'G'])
-const nextChildren = createVNode(['A', 'B', 'D', 'C', 'Y', 'E', 'F', 'G'])
+const prevChildren = createVNode(['A', 'B', 'C', 'D', 'W', 'Q', 'N', 'E', 'Z', 'F', 'G'])
+const nextChildren = createVNode(['A', 'B', 'Q', 'D', 'C', 'Y', 'E', 'G', 'F'])
 
 // const prevChildren = createVNode(['A', 'C', 'B', 'D'])
 // const nextChildren = createVNode(['A', 'B', 'C', 'D'])
