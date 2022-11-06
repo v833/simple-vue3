@@ -2,6 +2,7 @@ import { effect } from '../reactivity/effect'
 import { ShapeFlags } from '../shared/ShapeFlags'
 import { createComponentInstance, setupComponent } from './component'
 import { createAppAPI } from './createApp'
+import { getSequence } from './getSequence'
 import { Fragment, Text } from './vnode'
 
 export function createRenderer(options) {
@@ -190,11 +191,77 @@ export function createRenderer(options) {
         hostRemove(c1[i].el)
         i++
       }
-      // 乱序部分
+      // 乱序部分 中间对比
     } else {
+      // debugger
       // 1. 创建新的
       // 2. 删除老的
       // 3. 移动
+      let s1 = i
+      let s2 = i
+      const toBePatched = e2 - s2 + 1
+      let patched = 0
+      const keyToNewIndexMap = new Map()
+      const newIndexToOldIndexMap = new Array(toBePatched).fill(0)
+      let moved = false
+      let maxNewIndexSoFar = 0
+
+      for (let i = s2; i <= e2; i++) {
+        const nextChild = c2[i]
+        keyToNewIndexMap.set(nextChild.key, i)
+      }
+
+      for (let i = s1; i <= e1; i++) {
+        const prevChild = c1[i]
+        if (patched >= toBePatched) {
+          hostRemove(prevChild.el)
+          continue
+        }
+        let newIndex: number | null = null
+        if (prevChild.key !== null) {
+          newIndex = keyToNewIndexMap.get(prevChild.key)
+        } else {
+          for (let j = s2; j <= e2; j++) {
+            if (isSameVNodeType(prevChild, c2[j])) {
+              newIndex = j
+              break
+            }
+          }
+        }
+        if (!newIndex) {
+          hostRemove(prevChild.el)
+        } else {
+          if (newIndex >= maxNewIndexSoFar) {
+            maxNewIndexSoFar = newIndex
+          } else {
+            moved = true
+          }
+
+          newIndexToOldIndexMap[newIndex - s2] = i + 1
+          patch(prevChild, c2[newIndex], container, parentComponent, null)
+          patched++
+        }
+      }
+
+      const increasingNewIndexSequence = moved ? getSequence(newIndexToOldIndexMap) : []
+      let j = increasingNewIndexSequence.length - 1
+      // 倒叙
+      for (let i = toBePatched - 1; i >= 0; i--) {
+        const nextIndex = i + s2
+        const nextChild = c2[nextIndex]
+        const anchor = nextIndex + 1 < c2.length ? c2[nextIndex + 1].el : null
+
+        if (newIndexToOldIndexMap[i] === 0) {
+          patch(null, nextChild, container, parentComponent, anchor)
+        } else if (moved) {
+          if (j < 0 || i !== increasingNewIndexSequence[j]) {
+            console.log('移动位置')
+            hostInsert(nextChild.el, container, anchor)
+          } else {
+            j--
+          }
+        }
+      }
     }
   }
 
