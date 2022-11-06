@@ -28,4 +28,17 @@ describe('parse', () => {
       })
     })
   })
+
+  describe('text', () => {
+    test('simple text', () => {
+      const content = 'some text'
+      const ast: any = baseParse(content)
+
+      // root
+      expect(ast.children[0]).toStrictEqual({
+        type: NodeTypes.TEXT,
+        content
+      })
+    })
+  })
 })
