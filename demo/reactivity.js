@@ -25,26 +25,39 @@ export function track(target, key) {
   activeEffect.deps.push(deps)
 }
 
-export function trigger(target, key, type) {
+export function trigger(target, key, type, newValue) {
   const depsMap = bucket.get(target)
   if (!depsMap) return
   const effects = depsMap.get(key)
   const effectsToRun = new Set()
-  effects &&
-    effects.forEach((effectFn) => {
-      if (effectFn !== activeEffect) {
-        effectsToRun.add(effectFn)
-      }
-    })
-  // 只有操作类型为'ADD'时, 才触发与ITERATE_KEY相关联的副作用函数1重新执行
-  if (['ADD', 'DELETE'].includes(type)) {
-    const iterateEffects = target.get(ITERATE_KEY)
-    iterateEffects &&
-      iterateEffects.forEach((effectFn) => {
+
+  function addEffects(effects) {
+    effects &&
+      effects.forEach((effectFn) => {
         if (effectFn !== activeEffect) {
           effectsToRun.add(effectFn)
         }
       })
+  }
+  addEffects(effects)
+  // 只有操作类型为'ADD'时, 才触发与ITERATE_KEY相关联的副作用函数1重新执行
+  if (['ADD', 'DELETE'].includes(type)) {
+    const iterateEffects = depsMap.get(ITERATE_KEY)
+    addEffects(iterateEffects)
+  }
+  if (type === 'ADD' && Array.isArray(target)) {
+    const lengthEffects = depsMap.get('length')
+    addEffects(lengthEffects)
+  }
+  // 如果操作目标是数组, 并且修改了数组的长度
+  if (Array.isArray(target) && key === 'length') {
+    // 对于索引大于或新的length的元素,
+    // 需要把所有相关联的副作用函数放入effectToRun中待执行
+    depsMap.forEach((effects, key) => {
+      if (key > newValue) {
+        addEffects(effects)
+      }
+    })
   }
   effectsToRun.forEach((effectFn) => {
     const { scheduler } = effectFn.options

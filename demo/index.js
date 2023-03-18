@@ -11,7 +11,7 @@ function createReactive(data, isShallow = false, isReadonly = false) {
       if (key === 'raw') {
         return target
       }
-      if (!isReadonly) {
+      if (!isReadonly && typeof key !== 'symbol') {
         track(target, key)
       }
       track(target, key)
@@ -25,7 +25,7 @@ function createReactive(data, isShallow = false, isReadonly = false) {
 
       return res
     },
-    set(target, key, value, receiver) {
+    set(target, key, newValue, receiver) {
       if (isReadonly) {
         console.warn(`属性${key}是只读的`)
         return true
@@ -34,11 +34,17 @@ function createReactive(data, isShallow = false, isReadonly = false) {
       // receiver是代理对象
       const oldValue = target[key]
       // 判断for...in循环是否修改了值
-      const type = Object.prototype.hasOwnProperty.call(target, key) ? 'SET' : 'ADD'
-      const res = Reflect.set(target, key, value, receiver)
+      const type = Array.isArray(target)
+        ? Number(key) < target.length
+          ? 'SET'
+          : 'ADD'
+        : Object.prototype.hasOwnProperty.call(target, key)
+        ? 'SET'
+        : 'ADD'
+      const res = Reflect.set(target, key, newValue, receiver)
       if (target === receiver.raw) {
-        if (value !== oldValue) {
-          trigger(target, key, type)
+        if (newValue !== oldValue) {
+          trigger(target, key, type, newValue)
         }
       }
       return res
@@ -48,7 +54,7 @@ function createReactive(data, isShallow = false, isReadonly = false) {
       return Reflect.has(target, key, receiver)
     },
     ownKeys(target) {
-      track(target, ITERATE_KEY)
+      track(target, Array.isArray(target) ? 'length' : ITERATE_KEY)
       return Reflect.ownKeys(target)
     },
     deleteProperty(target, key) {
@@ -140,3 +146,19 @@ const obj = reactive(data)
 // readonlyObj.foo = 2
 
 // TODO Array
+// const arr = reactive(['foo'])
+// effect(() => {
+//   console.log(arr[0])
+//   console.log('length', arr.length)
+// })
+
+// arr.length = 0
+
+// const arr = reactive([1, 2])
+// effect(() => {
+//   console.log(arr.includes(1))
+// })
+
+// arr[0] = 3
+
+// TODO ref
