@@ -37,7 +37,7 @@ export function trigger(target, key, type) {
       }
     })
   // 只有操作类型为'ADD'时, 才触发与ITERATE_KEY相关联的副作用函数1重新执行
-  if (type === 'ADD') {
+  if (['ADD', 'DELETE'].includes(type)) {
     const iterateEffects = target.get(ITERATE_KEY)
     iterateEffects &&
       iterateEffects.forEach((effectFn) => {
