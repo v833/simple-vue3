@@ -1,5 +1,19 @@
+const TEXT = Symbol()
+const COMMENT = Symbol()
+const FRAGMENT = Symbol()
+
 export function createRenderer(options = {}) {
-  const { createElement, insert, unmount, setElementText, patchProps } = options
+  const {
+    createElement,
+    insert,
+    unmount,
+    setElementText,
+    patchProps,
+    createText,
+    setText,
+    createComment,
+    setComment
+  } = options
 
   function patch(n1, n2, container) {
     // 当vnode的type不同时, 卸载旧vnode
@@ -9,7 +23,12 @@ export function createRenderer(options = {}) {
     }
     const type = typeof n2.type
     switch (type) {
-      case 'fragment':
+      case FRAGMENT:
+        if (!n1) {
+          n2.children.forEach((c) => patch(null, c, container))
+        } else {
+          patchChildren(n1, n2, children)
+        }
         break
       case 'string':
         if (!n1) {
@@ -18,6 +37,28 @@ export function createRenderer(options = {}) {
         } else {
           // 更新
           patchElement(n1, n2)
+        }
+        break
+      case TEXT:
+        if (!n1) {
+          const el = (n2.el = createText(n2.children))
+          insert(el, container)
+        } else {
+          const el = (n2.el = n1.el)
+          if (n2.children !== n1.children) {
+            setText(el, n2.children)
+          }
+        }
+        break
+      case COMMENT:
+        if (!n1) {
+          const el = (n2.el = createComment(n2.children))
+          insert(el, container)
+        } else {
+          const el = (n2.el = n1.el)
+          if (n2.children !== n1.children) {
+            setComment(el, n2.children)
+          }
         }
         break
       case 'object':
@@ -56,6 +97,50 @@ export function createRenderer(options = {}) {
     }
     insert(el, container)
   }
+  function patchElement(n1, n2) {
+    const el = (n2.el = n1.el)
+    const oldProps = n1.props
+    const newProps = n2.props
+    // 更新props
+    for (const key in newProps) {
+      if (newProps[key] !== oldProps[key]) {
+        patchProps(el, key, oldProps[key], newProps[key])
+      }
+    }
+    for (const key in oldProps) {
+      if (!(key in newProps)) {
+        patchProps(el, key, oldProps[key], null)
+      }
+    }
+    // 更新children
+    patchChildren(n1, n2, el)
+  }
+  function patchChildren(n1, n2, container) {
+    if (typeof n2.children === 'string') {
+      // 旧节点的类型有三种可能, 没有子节点, 文本节点以及一组子节点
+      // 只有当旧节点为一组节点时, 才需要逐个卸载, 其他情况下什么都不需要做
+      if (Array.isArray(n1.children)) {
+        n1.children.forEach((c) => unmount(c))
+      }
+      setElementText(container, n2.children)
+    } else if (Array.isArray(n2.children)) {
+      if (Array.isArray(n1.children)) {
+        //TODO diff
+        n1.children.forEach((c) => unmount(c))
+        n2.children.forEach((c) => patch(null, c, container))
+      } else {
+        setElementText(container, '')
+        n2.children.forEach((c) => patch(null, c, container))
+      }
+    } else {
+      // 代码运行到这里说明新子节点不存在
+      if (Array.isArray(n1.children)) {
+        n1.children.forEach((c) => unmount(c))
+      } else if (typeof n1.children === 'string') {
+        setElementText(container, '')
+      }
+    }
+  }
   return {
     render
     // hydrate
@@ -68,10 +153,26 @@ export const renderOptions = {
   setElementText(el, text) {
     el.textContent = text
   },
+  createText(text) {
+    return document.createTextNode(text)
+  },
+  setText(el, text) {
+    el.nodeValue = text
+  },
+  createComment(comment) {
+    return document.createComment(comment)
+  },
+  setComment(comment) {
+    el.nodeValue = comment
+  },
   insert(el, parent, anchor = null) {
     parent.insertBefore(el, anchor)
   },
   unmount(vnode) {
+    if (vnode.type === FRAGMENT) {
+      vnode.children.forEach((c) => renderOptions.unmount(c))
+      return
+    }
     const parent = vnode.el.parentNode
     if (parent) {
       parent.removeChild(vnode.el)
@@ -109,6 +210,7 @@ export const renderOptions = {
         el.removeEventListener(name, invoker)
       }
     } else if (key === 'class') {
+      // el.className 效率比setAttribute高
       el.className = nextValue || ''
     } else if (renderOptions.shouldSetAsProps(el, key)) {
       const type = typeof el[key]
