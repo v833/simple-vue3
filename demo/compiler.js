@@ -126,53 +126,7 @@ export function createRenderer(options = {}) {
     } else if (Array.isArray(n2.children)) {
       if (Array.isArray(n1.children)) {
         //TODO diff
-        const oldChildren = n1.children
-        const newChildren = n2.children
-        const oldLen = oldChildren.length
-        const newLen = newChildren.length
-        // 用来存储寻找过程中遇到的最大索引值
-        let lastIndex = 0
-        for (let i = 0; i < newLen; i++) {
-          const newVNode = newChildren[i]
-          let j = 0
-          // find代表是否在旧的一组节点中找到可以复用的节点
-          let find = false
-          for (j; j < oldLen; j++) {
-            const oldVNode = oldChildren[j]
-            if (newVNode.key === oldVNode.key) {
-              find = true
-              patch(oldVNode, newVNode, container)
-              if (j < lastIndex) {
-                // 如果当前索引小于最大索引, 意味着该节点对应的真实DOM需要移动
-                const preVNode = newChildren[i - 1]
-                if (preVNode) {
-                  const anchor = preVNode.el.nextSibling
-                  insert(newVNode.el, container, anchor)
-                }
-              } else {
-                lastIndex = j
-              }
-              break
-            }
-          }
-          if (!find) {
-            const preVNode = newChildren[i - 1]
-            let anchor = null
-            if (preVNode) {
-              anchor = preVNode.el.nextSibling
-            } else {
-              anchor = container.firstChild
-            }
-            patch(null, newVNode, container, anchor)
-          }
-        }
-        for (let i = 0; i < oldLen; i++) {
-          const oldVNode = oldChildren[i]
-          const has = newChildren.find((vnode) => vnode.key === oldVNode.key)
-          if (!has) {
-            unmount(oldVNode)
-          }
-        }
+        patchKeyedChildren(n1, n2, container)
       } else {
         setElementText(container, '')
         n2.children.forEach((c) => patch(null, c, container))
@@ -183,6 +137,68 @@ export function createRenderer(options = {}) {
         n1.children.forEach((c) => unmount(c))
       } else if (typeof n1.children === 'string') {
         setElementText(container, '')
+      }
+    }
+  }
+  function patchKeyedChildren(n1, n2, container) {
+    const oldChildren = n1.children
+    const newChildren = n2.children
+    // 四个索引值
+    let oldStartIdx = 0
+    let oldEndIdx = oldChildren.length - 1
+    let newStartIdx = 0
+    let newEndIdx = newChildren.length - 1
+
+    let oldStartVNode = oldChildren[oldStartIdx]
+    let oldEndVNode = oldChildren[oldEndIdx]
+    let newStartVNode = newChildren[newStartIdx]
+    let newEndVNode = newChildren[newEndIdx]
+
+    while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+      if (!oldStartVNode) {
+        oldStartVNode = oldChildren[++oldStartIdx]
+      } else if (!oldEndVNode) {
+        oldEndVNode = oldChildren[--oldEndIdx]
+      } else if (isSameKey(oldStartVNode, newStartVNode)) {
+        patch(oldStartVNode, newStartVNode, container)
+        oldStartVNode = oldChildren[++oldStartIdx]
+        newStartVNode = newChildren[++newStartIdx]
+      } else if (isSameKey(oldEndVNode, newEndVNode)) {
+        patch(oldEndVNode, newEndVNode, container)
+        oldEndVNode = oldChildren[--oldEndIdx]
+        newEndVNode = newChildren[--newEndIdx]
+      } else if (isSameKey(oldStartVNode, newEndVNode)) {
+        patch(oldStartVNode, newEndVNode, container)
+        insert(oldStartVNode.el, container, oldEndVNode.el.nextSibling)
+        oldStartVNode = oldChildren[++oldStartIdx]
+        newEndVNode = newChildren[--newEndIdx]
+      } else if (isSameKey(oldEndVNode, newStartVNode)) {
+        patch(oldEndVNode, newStartVNode, container)
+        insert(oldEndVNode.el, container, oldStartVNode.el)
+        oldEndVNode = oldChildren[--oldEndIdx]
+        newStartVNode = newChildren[++newStartIdx]
+      } else {
+        // 遍历旧的一组子节点, 视图寻找与newStartVNode拥有相同key值的节点
+        const idxInOld = oldChildren.findIndex((node) => node.key === newStartVNode.key)
+        if (idxInOld > 0) {
+          const vnodeToMove = oldChildren[idxInOld]
+          patch(vnodeToMove, newStartVNode, container)
+          insert(vnodeToMove.el, container, oldStartVNode.el)
+          oldChildren[idxInOld] = undefined
+        } else {
+          // 新增
+          patch(null, newStartVNode, container, oldStartVNode.el)
+        }
+        newStartVNode = newChildren[++newStartIdx]
+      }
+    }
+    if (oldEndIdx < oldStartIdx && newStartIdx <= newEndIdx) {
+      for (let i = newStartIdx; i <= newEndIdx; i++) {
+        patch(null, newChildren[i], container, oldStartVNode.el)
+      }
+    } else if (newEndIdx < newStartIdx && oldStartIdx <= oldEndIdx) {
+      for (let i = oldStartIdx; i <= oldEndIdx; i++) {
+        unmount(oldChildren[i])
       }
     }
   }
@@ -266,6 +282,60 @@ export const renderOptions = {
       }
     } else {
       el.setAttribute(key, nextValue)
+    }
+  }
+}
+
+function isSameKey(n1, n2) {
+  return n1?.key === n2?.key
+}
+
+function easyDiff() {
+  const oldChildren = n1.children
+  const newChildren = n2.children
+  const oldLen = oldChildren.length
+  const newLen = newChildren.length
+  // 用来存储寻找过程中遇到的最大索引值
+  let lastIndex = 0
+  for (let i = 0; i < newLen; i++) {
+    const newVNode = newChildren[i]
+    let j = 0
+    // find代表是否在旧的一组节点中找到可以复用的节点
+    let find = false
+    for (j; j < oldLen; j++) {
+      const oldVNode = oldChildren[j]
+      if (newVNode.key === oldVNode.key) {
+        find = true
+        patch(oldVNode, newVNode, container)
+        if (j < lastIndex) {
+          // 如果当前索引小于最大索引, 意味着该节点对应的真实DOM需要移动
+          const preVNode = newChildren[i - 1]
+          if (preVNode) {
+            const anchor = preVNode.el.nextSibling
+            insert(newVNode.el, container, anchor)
+          }
+        } else {
+          lastIndex = j
+        }
+        break
+      }
+    }
+    if (!find) {
+      const preVNode = newChildren[i - 1]
+      let anchor = null
+      if (preVNode) {
+        anchor = preVNode.el.nextSibling
+      } else {
+        anchor = container.firstChild
+      }
+      patch(null, newVNode, container, anchor)
+    }
+  }
+  for (let i = 0; i < oldLen; i++) {
+    const oldVNode = oldChildren[i]
+    const has = newChildren.find((vnode) => vnode.key === oldVNode.key)
+    if (!has) {
+      unmount(oldVNode)
     }
   }
 }
