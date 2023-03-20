@@ -15,7 +15,7 @@ export function createRenderer(options = {}) {
     setComment
   } = options
 
-  function patch(n1, n2, container) {
+  function patch(n1, n2, container, anchor) {
     // 当vnode的type不同时, 卸载旧vnode
     if (n1 && n1.type !== n2.type) {
       unmount(n1)
@@ -33,7 +33,7 @@ export function createRenderer(options = {}) {
       case 'string':
         if (!n1) {
           // 新增
-          mountElement(n2, container)
+          mountElement(n2, container, anchor)
         } else {
           // 更新
           patchElement(n1, n2)
@@ -79,7 +79,7 @@ export function createRenderer(options = {}) {
   }
   // function hydrate(vnode, container) { }
 
-  function mountElement(vnode, container) {
+  function mountElement(vnode, container, anchor) {
     const el = (vnode.el = createElement(vnode.type))
     const { children, props } = vnode
 
@@ -95,7 +95,7 @@ export function createRenderer(options = {}) {
         patchProps(el, key, null, props[key])
       }
     }
-    insert(el, container)
+    insert(el, container, anchor)
   }
   function patchElement(n1, n2) {
     const el = (n2.el = n1.el)
@@ -126,8 +126,53 @@ export function createRenderer(options = {}) {
     } else if (Array.isArray(n2.children)) {
       if (Array.isArray(n1.children)) {
         //TODO diff
-        n1.children.forEach((c) => unmount(c))
-        n2.children.forEach((c) => patch(null, c, container))
+        const oldChildren = n1.children
+        const newChildren = n2.children
+        const oldLen = oldChildren.length
+        const newLen = newChildren.length
+        // 用来存储寻找过程中遇到的最大索引值
+        let lastIndex = 0
+        for (let i = 0; i < newLen; i++) {
+          const newVNode = newChildren[i]
+          let j = 0
+          // find代表是否在旧的一组节点中找到可以复用的节点
+          let find = false
+          for (j; j < oldLen; j++) {
+            const oldVNode = oldChildren[j]
+            if (newVNode.key === oldVNode.key) {
+              find = true
+              patch(oldVNode, newVNode, container)
+              if (j < lastIndex) {
+                // 如果当前索引小于最大索引, 意味着该节点对应的真实DOM需要移动
+                const preVNode = newChildren[i - 1]
+                if (preVNode) {
+                  const anchor = preVNode.el.nextSibling
+                  insert(newVNode.el, container, anchor)
+                }
+              } else {
+                lastIndex = j
+              }
+              break
+            }
+          }
+          if (!find) {
+            const preVNode = newChildren[i - 1]
+            let anchor = null
+            if (preVNode) {
+              anchor = preVNode.el.nextSibling
+            } else {
+              anchor = container.firstChild
+            }
+            patch(null, newVNode, container, anchor)
+          }
+        }
+        for (let i = 0; i < oldLen; i++) {
+          const oldVNode = oldChildren[i]
+          const has = newChildren.find((vnode) => vnode.key === oldVNode.key)
+          if (!has) {
+            unmount(oldVNode)
+          }
+        }
       } else {
         setElementText(container, '')
         n2.children.forEach((c) => patch(null, c, container))

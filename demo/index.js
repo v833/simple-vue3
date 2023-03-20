@@ -73,34 +73,29 @@ function reactiveDemo() {
   // refVal.value = 2
 }
 
-// function renderDemo() {}
-const renderer = createRenderer(renderOptions)
-const vnode = {
-  type: 'div',
-  props: { id: 'foo' },
-  children: [
-    {
+function createVNode(keyList) {
+  return keyList.reduce((arr, item) => {
+    arr.push({
       type: 'p',
-      props: {
-        class: 'p'
-      },
-      children: 'hello'
-    },
-    {
-      type: 'button',
-      props: {
-        onClick: [
-          () => {
-            console.log('click')
-          },
-          () => {
-            console.log('click2')
-          }
-        ]
-      },
-      children: 'click'
-    }
-  ]
+      key: String(item),
+      children: String(item)
+    })
+    return arr
+  }, [])
+}
+
+const renderer = createRenderer(renderOptions)
+const vnode1 = {
+  type: 'div',
+  children: createVNode([1, 2, 3])
+}
+const vnode2 = {
+  type: 'div',
+  children: createVNode([3, 1, 2])
 }
 // app._vnode 判断新增还是更新
-renderer.render(vnode, app)
+renderer.render(vnode1, app)
+
+setTimeout(() => {
+  renderer.render(vnode2, app)
+}, 1500)
