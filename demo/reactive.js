@@ -72,7 +72,7 @@ export function reactive(obj) {
   return createReactive(obj)
 }
 
-function shallowReactive(obj) {
+export function shallowReactive(obj) {
   return createReactive(obj, true)
 }
 

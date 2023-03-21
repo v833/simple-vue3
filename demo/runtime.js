@@ -1,7 +1,8 @@
+import { hasPropsChanged, resolveProps } from './component.js'
 import { effect } from './effect.js'
 import { lis } from './lis.js'
 import { queueJob } from './next-tick.js'
-import { reactive } from './reactive.js'
+import { reactive, shallowReactive } from './reactive.js'
 
 const TEXT = Symbol()
 const COMMENT = Symbol()
@@ -152,21 +153,55 @@ export function createRenderer(options = {}) {
   }
   function mountComponent(vnode, container, anchor) {
     const componentOptions = vnode.type
-    const { render, data, beforeCreate, created, beforeMount, mounted, beforeUpdate, updated } =
-      componentOptions
+    const {
+      render,
+      data,
+      props: propsOptions,
+      beforeCreate,
+      created,
+      beforeMount,
+      mounted,
+      beforeUpdate,
+      updated
+    } = componentOptions
 
     beforeCreate && beforeCreate()
 
+    const [props, attrs] = resolveProps(propsOptions, vnode.props)
     const state = reactive(data())
 
     // 定义组件实例, 一个组件实力本质上就是一个对象, 它包含与组件有关的状态信息
     const instance = {
+      props: shallowReactive(props),
       state,
       isMounted: false,
       subTree: null
     }
 
     vnode.component = instance
+
+    const renderContext = new Proxy(instance, {
+      get(t, k, r) {
+        const { state, props } = t
+        if (state && k in state) {
+          return state[k]
+        } else if (k in props) {
+          return props[k]
+        } else {
+          console.log(`${key} 未定义`)
+        }
+      },
+      set(t, k, v, r) {
+        const { state, props } = t
+        if (state && k in state) {
+          state[k] = v
+        } else if (k in props) {
+          props[k] = v
+        } else {
+          console.log(`${key} 未定义`)
+        }
+      }
+    })
 
     created && created.call(state)
 
@@ -191,7 +226,20 @@ export function createRenderer(options = {}) {
       }
     )
   }
-  function patchComponent() {}
+  function patchComponent(n1, n2, anchor) {
+    const instance = (n2.component = n1.component)
+    const { props } = instance
+    // 调用hasPropsChanged检测子组件传递的props是否发生变化, 如果没有变化, 不更新
+    if (hasPropsChanged(n1.props, n2.props)) {
+      const [nextProps] = resolveProps(n2.type.props, n2.props)
+      for (const k in nextProps) {
+        props[k] = nextProps[k]
+      }
+      for (const k in props) {
+        if (!(k in nextProps)) delete props[k]
+      }
+    }
+  }
   // 快速diff
   function patchKeyedChildren(n1, n2, container) {
     const oldChildren = n1.children

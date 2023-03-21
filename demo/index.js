@@ -102,10 +102,13 @@ const MyComponent = {
       foo: 'hello'
     }
   },
+  props: {
+    title: String
+  },
   render() {
     return {
       type: 'div',
-      children: this.foo
+      children: this.title
     }
   }
 }
@@ -114,8 +117,8 @@ const App = {
   name: 'App',
   type: MyComponent,
   props: {
-    title: 'my title',
-    other: this.val
+    title: 'my title'
+    // other: this.val
   },
   children: []
 }
