@@ -87,11 +87,11 @@ function createVNode(keyList) {
 const renderer = createRenderer(renderOptions)
 const vnode1 = {
   type: 'div',
-  children: createVNode([1, 2, 3, 5])
+  children: createVNode([1, 2, 3, 4, 6, 5])
 }
 const vnode2 = {
   type: 'div',
-  children: createVNode([4, 1, 2, 3])
+  children: createVNode([1, 3, 4, 2, 7, 5])
 }
 // app._vnode 判断新增还是更新
 renderer.render(vnode1, app)

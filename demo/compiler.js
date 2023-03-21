@@ -1,3 +1,5 @@
+import { lis } from './lis.js'
+
 const TEXT = Symbol()
 const COMMENT = Symbol()
 const FRAGMENT = Symbol()
@@ -140,68 +142,191 @@ export function createRenderer(options = {}) {
       }
     }
   }
+  // 快速diff
   function patchKeyedChildren(n1, n2, container) {
     const oldChildren = n1.children
     const newChildren = n2.children
-    // 四个索引值
-    let oldStartIdx = 0
-    let oldEndIdx = oldChildren.length - 1
-    let newStartIdx = 0
-    let newEndIdx = newChildren.length - 1
 
-    let oldStartVNode = oldChildren[oldStartIdx]
-    let oldEndVNode = oldChildren[oldEndIdx]
-    let newStartVNode = newChildren[newStartIdx]
-    let newEndVNode = newChildren[newEndIdx]
-
-    while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
-      if (!oldStartVNode) {
-        oldStartVNode = oldChildren[++oldStartIdx]
-      } else if (!oldEndVNode) {
-        oldEndVNode = oldChildren[--oldEndIdx]
-      } else if (isSameKey(oldStartVNode, newStartVNode)) {
-        patch(oldStartVNode, newStartVNode, container)
-        oldStartVNode = oldChildren[++oldStartIdx]
-        newStartVNode = newChildren[++newStartIdx]
-      } else if (isSameKey(oldEndVNode, newEndVNode)) {
-        patch(oldEndVNode, newEndVNode, container)
-        oldEndVNode = oldChildren[--oldEndIdx]
-        newEndVNode = newChildren[--newEndIdx]
-      } else if (isSameKey(oldStartVNode, newEndVNode)) {
-        patch(oldStartVNode, newEndVNode, container)
-        insert(oldStartVNode.el, container, oldEndVNode.el.nextSibling)
-        oldStartVNode = oldChildren[++oldStartIdx]
-        newEndVNode = newChildren[--newEndIdx]
-      } else if (isSameKey(oldEndVNode, newStartVNode)) {
-        patch(oldEndVNode, newStartVNode, container)
-        insert(oldEndVNode.el, container, oldStartVNode.el)
-        oldEndVNode = oldChildren[--oldEndIdx]
-        newStartVNode = newChildren[++newStartIdx]
-      } else {
-        // 遍历旧的一组子节点, 视图寻找与newStartVNode拥有相同key值的节点
-        const idxInOld = oldChildren.findIndex((node) => node.key === newStartVNode.key)
-        if (idxInOld > 0) {
-          const vnodeToMove = oldChildren[idxInOld]
-          patch(vnodeToMove, newStartVNode, container)
-          insert(vnodeToMove.el, container, oldStartVNode.el)
-          oldChildren[idxInOld] = undefined
-        } else {
-          // 新增
-          patch(null, newStartVNode, container, oldStartVNode.el)
-        }
-        newStartVNode = newChildren[++newStartIdx]
-      }
+    // 处理相同的前置节点, 索引j指向新旧两组子节点的开头
+    let j = 0
+    let oldVNode = oldChildren[j]
+    let newVNode = newChildren[j]
+    while (oldVNode.key === newVNode.key) {
+      patch(oldVNode, newVNode, container)
+      j++
+      oldVNode = oldChildren[j]
+      newVNode = newChildren[j]
     }
-    if (oldEndIdx < oldStartIdx && newStartIdx <= newEndIdx) {
-      for (let i = newStartIdx; i <= newEndIdx; i++) {
-        patch(null, newChildren[i], container, oldStartVNode.el)
+    // 处理相同的后置节点
+    let oldEnd = oldChildren.length - 1
+    let newEnd = newChildren.length - 1
+    oldVNode = oldChildren[oldEnd]
+    newVNode = newChildren[newEnd]
+    while (oldVNode.key === newVNode.key) {
+      patch(oldVNode, newVNode, container)
+      oldVNode = oldChildren[--oldEnd]
+      newVNode = newChildren[--newEnd]
+    }
+    // 旧子节点处理完毕, 新子节点还有未被处理的节点
+    if (j > oldEnd && j <= newEnd) {
+      const anchorIndex = newEnd + 1
+      const anchor = anchorIndex < newChildren.length ? newChildren[anchorIndex].el : null
+      while (j <= newEnd) {
+        patch(null, newChildren[j++], container, anchor)
       }
-    } else if (newEndIdx < newStartIdx && oldStartIdx <= oldEndIdx) {
-      for (let i = oldStartIdx; i <= oldEndIdx; i++) {
-        unmount(oldChildren[i])
+    } else if (j > newEnd && j < oldEnd) {
+      while (j <= oldEnd) {
+        unmount(oldChildren[j++])
       }
+    } else {
+      // 处理非理想情况
+      const count = newEnd - j + 1
+      const source = new Array(count).fill(-1)
+
+      const oldStart = j
+      const newStart = j
+      let moved = false
+      let pos = 0
+
+      // 构建索引表
+      const keyIndex = new Map()
+      for (let i = newStart; i <= newEnd; i++) {
+        keyIndex.set(newChildren[i].key, i)
+      }
+
+      // 更新过的节点数量
+      let patched = 0
+
+      for (let i = oldStart; i <= oldEnd; i++) {
+        oldVNode = oldChildren[i]
+        // 如果更新过的节点数量大于需要更新的节点数量, 则卸载多余的节点
+        if (patched >= count) {
+          unmount(oldVNode)
+          continue
+        }
+        // 通过索引表快速找到新的一组子节点中具有相同key值得节点位置
+        const k = keyIndex.get(oldVNode.key)
+        if (typeof k !== 'undefined') {
+          newVNode = newChildren[k]
+          patch(oldVNode, newVNode, container)
+          patched++
+          source[k - newStart] = i
+          // 判断是否需要移动
+          if (k < pos) {
+            moved = true
+          } else {
+            pos = k
+          }
+        } else {
+          unmount(oldVNode)
+        }
+      }
+
+      // 移动元素
+      if (moved) {
+        // 最长递增子序列中的元素在source数组中的位置索引
+        const seq = lis(source)
+
+        // s指向最长递增子序列的最后一个元素
+        let s = seq.length - 1
+        // i 指向新的一组子节点的最后一个元素
+        let i = count - 1
+
+        for (i; i >= 0; i--) {
+          const pos = i + newStart
+          const newVNode = newChildren[pos]
+          const nextPos = pos + 1
+          const anchor = nextPos < newChildren.length ? newChildren[nextPos].el : null
+          if (source[i] === -1) {
+            // 新增子节点
+            patch(null, newVNode, container, anchor)
+          } else if (i !== seq[s]) {
+            // 如果节点的索引i不等于seq[s]的值, 说明节点需要移动
+            insert(newVNode.el, container, anchor)
+          } else {
+            // 不需要移动
+            s--
+          }
+        }
+      }
+
+      // 遍历旧的一组子节点
+      // for (let i = oldStart; i < oldEnd; i++) {
+      //   const oldVNode = oldChildren[i]
+      //   for (let k = newStart; k < newEnd; k++) {
+      //     const newVNode = newChildren[k]
+      // 建立索引的纽带
+      //     if (oldVNode.key === newVNode.key) {
+      //       patch(oldVNode, newVNode, container)
+      //       source[k - newStart] = i
+      //     }
+      //   }
+      // }
     }
   }
+  // 双端diff
+  // function patchKeyedChildren(n1, n2, container) {
+  //   const oldChildren = n1.children
+  //   const newChildren = n2.children
+  //   // 四个索引值
+  //   let oldStartIdx = 0
+  //   let oldEndIdx = oldChildren.length - 1
+  //   let newStartIdx = 0
+  //   let newEndIdx = newChildren.length - 1
+
+  //   let oldStartVNode = oldChildren[oldStartIdx]
+  //   let oldEndVNode = oldChildren[oldEndIdx]
+  //   let newStartVNode = newChildren[newStartIdx]
+  //   let newEndVNode = newChildren[newEndIdx]
+
+  //   while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+  //     if (!oldStartVNode) {
+  //       oldStartVNode = oldChildren[++oldStartIdx]
+  //     } else if (!oldEndVNode) {
+  //       oldEndVNode = oldChildren[--oldEndIdx]
+  //     } else if (isSameKey(oldStartVNode, newStartVNode)) {
+  //       patch(oldStartVNode, newStartVNode, container)
+  //       oldStartVNode = oldChildren[++oldStartIdx]
+  //       newStartVNode = newChildren[++newStartIdx]
+  //     } else if (isSameKey(oldEndVNode, newEndVNode)) {
+  //       patch(oldEndVNode, newEndVNode, container)
+  //       oldEndVNode = oldChildren[--oldEndIdx]
+  //       newEndVNode = newChildren[--newEndIdx]
+  //     } else if (isSameKey(oldStartVNode, newEndVNode)) {
+  //       patch(oldStartVNode, newEndVNode, container)
+  //       insert(oldStartVNode.el, container, oldEndVNode.el.nextSibling)
+  //       oldStartVNode = oldChildren[++oldStartIdx]
+  //       newEndVNode = newChildren[--newEndIdx]
+  //     } else if (isSameKey(oldEndVNode, newStartVNode)) {
+  //       patch(oldEndVNode, newStartVNode, container)
+  //       insert(oldEndVNode.el, container, oldStartVNode.el)
+  //       oldEndVNode = oldChildren[--oldEndIdx]
+  //       newStartVNode = newChildren[++newStartIdx]
+  //     } else {
+  //       // 遍历旧的一组子节点, 视图寻找与newStartVNode拥有相同key值的节点
+  //       const idxInOld = oldChildren.findIndex((node) => node.key === newStartVNode.key)
+  //       if (idxInOld > 0) {
+  //         const vnodeToMove = oldChildren[idxInOld]
+  //         patch(vnodeToMove, newStartVNode, container)
+  //         insert(vnodeToMove.el, container, oldStartVNode.el)
+  //         oldChildren[idxInOld] = undefined
+  //       } else {
+  //         // 新增
+  //         patch(null, newStartVNode, container, oldStartVNode.el)
+  //       }
+  //       newStartVNode = newChildren[++newStartIdx]
+  //     }
+  //   }
+  //   if (oldEndIdx < oldStartIdx && newStartIdx <= newEndIdx) {
+  //     for (let i = newStartIdx; i <= newEndIdx; i++) {
+  //       patch(null, newChildren[i], container, oldStartVNode.el)
+  //     }
+  //   } else if (newEndIdx < newStartIdx && oldStartIdx <= oldEndIdx) {
+  //     for (let i = oldStartIdx; i <= oldEndIdx; i++) {
+  //       unmount(oldChildren[i])
+  //     }
+  //   }
+  // }
   return {
     render
     // hydrate
