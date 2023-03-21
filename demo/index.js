@@ -1,4 +1,4 @@
-import { createRenderer, renderOptions } from './compiler.js'
+import { createRenderer, renderOptions } from './runtime.js'
 
 function reactiveDemo() {
   // const data = { ok: true, text: 'hello world', foo: 1, bar: 2, deep: { a: 1 } }
@@ -85,17 +85,43 @@ function createVNode(keyList) {
 }
 
 const renderer = createRenderer(renderOptions)
-const vnode1 = {
-  type: 'div',
-  children: createVNode([1, 2, 3, 4, 6, 5])
-}
-const vnode2 = {
-  type: 'div',
-  children: createVNode([1, 3, 4, 2, 7, 5])
-}
+// const vnode1 = {
+//   type: 'div',
+//   children: createVNode([1, 2, 3, 4, 6, 5])
+// }
+// const vnode2 = {
+//   type: 'div',
+//   children: createVNode([1, 3, 4, 2, 7, 5])
+// }
 // app._vnode 判断新增还是更新
-renderer.render(vnode1, app)
 
-setTimeout(() => {
-  renderer.render(vnode2, app)
-}, 1500)
+const MyComponent = {
+  name: 'App',
+  data() {
+    return {
+      foo: 'hello'
+    }
+  },
+  render() {
+    return {
+      type: 'div',
+      children: this.foo
+    }
+  }
+}
+
+const App = {
+  name: 'App',
+  type: MyComponent,
+  props: {
+    title: 'my title',
+    other: this.val
+  },
+  children: []
+}
+
+renderer.render(App, document.getElementById('app'))
+
+// setTimeout(() => {
+//   renderer.render(vnode2, app)
+// }, 1500)
