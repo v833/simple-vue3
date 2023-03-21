@@ -434,6 +434,9 @@ export const renderOptions = {
     if (vnode.type === FRAGMENT) {
       vnode.children.forEach((c) => renderOptions.unmount(c))
       return
+    } else if (typeof vnode.type === 'object') {
+      renderOptions.unmount(vnode.component.subTree)
+      return
     }
     const parent = vnode.el.parentNode
     if (parent) {
