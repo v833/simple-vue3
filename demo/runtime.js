@@ -7,6 +7,7 @@ import { reactive, shallowReactive, shallowReadonly } from './reactive.js'
 const TEXT = Symbol()
 const COMMENT = Symbol()
 const FRAGMENT = Symbol()
+let currentInstance = null
 
 export function createRenderer(options = {}) {
   const {
@@ -178,7 +179,9 @@ export function createRenderer(options = {}) {
       state,
       isMounted: false,
       subTree: null,
-      slots
+      slots,
+      // 存储通过onMounted函数注册的生命周期函数, onMounted函数可以有多个
+      mounted: []
     }
 
     function emit(event, ...payload) {
@@ -192,7 +195,12 @@ export function createRenderer(options = {}) {
     }
 
     const setupContext = { attrs, emit }
+
+    setCurrentInstance(instance)
+
     const setupResult = setup(shallowReadonly(instance.props), setupContext)
+
+    setCurrentInstance(null)
 
     let setupState = null
     if (typeof setupResult === 'function') {
@@ -245,6 +253,7 @@ export function createRenderer(options = {}) {
           patch(null, subTree, container, anchor)
           instance.isMounted = true
           mounted && mounted.call(renderContext)
+          instance.mounted && instance.mounted.forEach((hook) => hook.call(renderContext))
         } else {
           beforeUpdate && beforeUpdate(renderContext)
           patch(instance.subTree, subTree, container, anchor)
@@ -480,6 +489,18 @@ export const renderOptions = {
 
 function isSameKey(n1, n2) {
   return n1?.key === n2?.key
+}
+
+function setCurrentInstance(instance) {
+  currentInstance = instance
+}
+
+function onMounted(fn) {
+  if (currentInstance) {
+    currentInstance.mounted.push(fn)
+  } else {
+    console.log('onMounted函数只能在setup中调用')
+  }
 }
 
 // 简单diff
