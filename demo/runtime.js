@@ -170,13 +170,15 @@ export function createRenderer(options = {}) {
 
     const [props, attrs] = resolveProps(propsOptions, vnode.props)
     const state = data ? reactive(data()) : null
+    const slots = vnode.children || {}
 
     // 定义组件实例, 一个组件实力本质上就是一个对象, 它包含与组件有关的状态信息
     const instance = {
       props: shallowReactive(props),
       state,
       isMounted: false,
-      subTree: null
+      subTree: null,
+      slots
     }
 
     function emit(event, ...payload) {
@@ -206,7 +208,8 @@ export function createRenderer(options = {}) {
 
     const renderContext = new Proxy(instance, {
       get(t, k, r) {
-        const { state, props } = t
+        const { state, props, slots } = t
+        if (k === '$slots') return slots
         if (state && k in state) {
           return state[k]
         } else if (k in props) {
