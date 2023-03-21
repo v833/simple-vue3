@@ -3,7 +3,7 @@ export function resolveProps(options, propsData) {
   const attrs = {}
 
   for (const key in propsData) {
-    if (key in options) {
+    if (key in options || key.startsWith('on')) {
       // 如果传递的props为自检自身定义的props, 则视为合法
       props[key] = propsData[key]
     } else {

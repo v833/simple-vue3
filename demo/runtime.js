@@ -2,7 +2,7 @@ import { hasPropsChanged, resolveProps } from './component.js'
 import { effect } from './effect.js'
 import { lis } from './lis.js'
 import { queueJob } from './next-tick.js'
-import { reactive, shallowReactive } from './reactive.js'
+import { reactive, shallowReactive, shallowReadonly } from './reactive.js'
 
 const TEXT = Symbol()
 const COMMENT = Symbol()
@@ -156,6 +156,7 @@ export function createRenderer(options = {}) {
     const {
       render,
       data,
+      setup,
       props: propsOptions,
       beforeCreate,
       created,
@@ -168,7 +169,7 @@ export function createRenderer(options = {}) {
     beforeCreate && beforeCreate()
 
     const [props, attrs] = resolveProps(propsOptions, vnode.props)
-    const state = reactive(data())
+    const state = data ? reactive(data()) : null
 
     // 定义组件实例, 一个组件实力本质上就是一个对象, 它包含与组件有关的状态信息
     const instance = {
@@ -176,6 +177,29 @@ export function createRenderer(options = {}) {
       state,
       isMounted: false,
       subTree: null
+    }
+
+    function emit(event, ...payload) {
+      const eventName = `on${event[0].toUpperCase() + event.slice(1)}`
+      const handler = instance.props[eventName]
+      if (handler) {
+        handler(...payload)
+      } else {
+        console.log('事件不存在')
+      }
+    }
+
+    const setupContext = { attrs, emit }
+    const setupResult = setup(shallowReadonly(instance.props), setupContext)
+
+    let setupState = null
+    if (typeof setupResult === 'function') {
+      if (render) {
+        console.error('setup函数返回渲染函数, render选项将被忽略')
+      }
+      render = setupResult
+    } else {
+      setupState = setupResult
     }
 
     vnode.component = instance
@@ -187,8 +211,10 @@ export function createRenderer(options = {}) {
           return state[k]
         } else if (k in props) {
           return props[k]
+        } else if (setupState && k in setupState) {
+          return setupState[k]
         } else {
-          console.log(`${key} 未定义`)
+          console.log(`${k} 未定义`)
         }
       },
       set(t, k, v, r) {
@@ -197,27 +223,29 @@ export function createRenderer(options = {}) {
           state[k] = v
         } else if (k in props) {
           props[k] = v
+        } else if (setupState && k in setupState) {
+          setupState[k] = v
         } else {
-          console.log(`${key} 未定义`)
+          console.log(`${k} 未定义`)
         }
       }
     })
 
-    created && created.call(state)
+    created && created.call(renderContext)
 
     effect(
       () => {
         // 组件自身响应式数据发生变化, 组件自动重新执行渲染函数
-        const subTree = render.call(state, state)
+        const subTree = render.call(renderContext)
         if (!instance.isMounted) {
-          beforeMount && beforeMount.call(state)
+          beforeMount && beforeMount.call(renderContext)
           patch(null, subTree, container, anchor)
           instance.isMounted = true
-          mounted && mounted.call(state)
+          mounted && mounted.call(renderContext)
         } else {
-          beforeUpdate && beforeUpdate(state)
+          beforeUpdate && beforeUpdate(renderContext)
           patch(instance.subTree, subTree, container, anchor)
-          updated && updated(state)
+          updated && updated(renderContext)
         }
         instance.subTree = subTree
       },

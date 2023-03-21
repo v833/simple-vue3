@@ -80,7 +80,7 @@ function readonly(obj) {
   return createReactive(obj, false, true)
 }
 
-function shallowReadonly(obj) {
+export function shallowReadonly(obj) {
   return createReactive(obj, true, true)
 }
 

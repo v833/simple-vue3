@@ -97,9 +97,10 @@ const renderer = createRenderer(renderOptions)
 
 const MyComponent = {
   name: 'App',
-  data() {
+  setup(props, { slots, emit, attrs, expose }) {
+    emit('change', 1, 2)
     return {
-      foo: 'hello'
+      count: 10
     }
   },
   props: {
@@ -108,7 +109,7 @@ const MyComponent = {
   render() {
     return {
       type: 'div',
-      children: this.title
+      children: this.title + '1' + 'count: ' + this.count
     }
   }
 }
